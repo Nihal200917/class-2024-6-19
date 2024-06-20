@@ -1,0 +1,81 @@
+---
+title: "Class 2024-06-19"
+---
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(leaflet)
+```
+
+
+```{r}
+# Set your Census API key
+census_api_key("ec4f717e7653477126cd18556acd4317894b5b17", overwrite = TRUE)
+
+# Define the variables you are interested in
+variables <- c(bachelors_degree = "B15003_022")
+
+# Specify the county and state FIPS codes for Los Angeles, CA
+county_fips <- "037" # Los Angeles County FIPS code
+state_fips <- "06" # California state FIPS code
+
+# Download the data
+la_education_data <- get_acs(
+  geography = "tract",
+  variables = variables,
+  state = state_fips,
+  county = county_fips,
+  year = 2020,
+  survey = "acs5",
+  geometry = TRUE # Set geometry = TRUE to get spatial data
+)
+# Calculate the percentage of people with a bachelor's degree
+la_education_data <- la_education_data %>%
+  group_by(GEOID) %>%
+  summarise(
+    estimate = sum(estimate),
+    moe = sum(moe),
+    percentage_bachelors = estimate / sum(estimate) * 100
+  )
+
+# Load spatial data for Los Angeles census tracts
+la_tracts <- tracts(state = state_fips, county = county_fips, cb = TRUE)
+
+# Merge the education data with the spatial data
+la_education_data <- geo_join(la_tracts, la_education_data, "GEOID", "GEOID")
+
+# Create a color palette for the percentage data
+pal <- colorNumeric(
+  palette = "YlOrRd",
+  domain = la_education_data$percentage_bachelors
+)
+# Create the leaflet map
+leaflet(data = la_education_data) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(
+    fillColor = ~pal(percentage_bachelors),
+    weight = 1,
+    opacity = 1,
+    color = "white",
+    dashArray = "3",
+    fillOpacity = 0.7,
+    highlight = highlightOptions(
+      weight = 2,
+      color = "#666",
+      dashArray = "",
+      fillOpacity = 0.7,
+      bringToFront = TRUE
+    ),
+    label = ~paste0("Tract: ", GEOID, "<br>",
+                    "Bachelor's Degree: ", round(percentage_bachelors, 2), "%")
+  ) %>%
+  addLegend(
+    pal = pal,
+    values = ~percentage_bachelors,
+    opacity = 0.7,
+    title = "Percentage with Bachelor's Degree",
+    position = "bottomright"
+  )
+```
+
